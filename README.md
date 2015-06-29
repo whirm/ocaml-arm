@@ -1,24 +1,35 @@
-ocaml-android
+ocaml-arm
 =============
 
-Ocaml cross-compiler for Android.
+Ocaml cross-compiler for ARM.
 
-On a 64bit Debian or Ubuntu installation, you need to install package
-`gcc-multilib`: we have to build 32 bit OCaml binaries when targeting
-32 bit architectures.
+Heavily based on [ocaml-android](https://github.com/vouillon/ocaml-android) from [Jerome Vouillon](https://github.com/vouillon/).
 
-Follow the following steps to compile:
-- download the Android NDK and the OCaml source code;
-- edit `Makefile.config`;
-- run `make`.
+## Building:
 
-For convenience, binaries (`ocamlc`, `ocamlopt`, ...) are put both in
-   `$ANDROID_BINDIR`
-prefixed by `arm-linux-androideabi-`, and in
-   `$ANDROID_BINDIR/arm-linux-androideabi`
-unprefixed.
-The Android OCaml runtime `ocamlrun` is in directory
-   `$ANDROID_PREFIX/bin/`.
+On a Debian or derivative distro, the following steps need to be taken:
+
+```bash
+sudo dpkg --add-architecture armhf
+sudo dpkg --add-architecture i386 # Only if on amd64.
+sudo apt-get update
+sudo apt-get install gcc-4.9-arm-linux-gnueabihf gcc-arm-linux-gnueabihf libc6-dev:armhf libgcc-4.9-dev:armhf linux-libc-dev:i386 opam
+opam init # And follow the instructions printed.
+opam switch 4.02.0
+opam install ocaml-src
+```
+
+And then just clone this repo and run make:
+
+```bash
+git clone https://github.com/whirm/ocaml-arm
+cd ocaml-arm
+make
+```
+
+You will find the final binaries installed in ```~/.opam/4.02.0/bin/arm-linux-gnueabihf*```
+
+##### Some notes from the original project:
 
 There are a few pitfalls regarding bytecode programs.  First, if you
 link them without the `-custom` directive, you will need to use
