@@ -1,47 +1,55 @@
 
 include Makefile.config
 
-TOOLCHAIN = $(HOST_ARCH)-4.8
-ANDROID_OCAML_ARCH = $(ANDROID_ARCH)
-ifeq ($(ABI),armeabi-v7a)
+TOOLCHAIN = $(HOST_ARCH)-4.9
+TARGET_OCAML_ARCH = $(TARGET_ARCH)
+
+ifeq ($(ABI),gnueabihf)
+  HOST_ARCH = arm-linux-gnueabihf
+  TARGET_ARCH = arm
+  TARGET_MODEL = armv7
+  TARGET_SYSTEM = linux_eabihf
+else ifeq ($(ABI),armeabi-v7a)
   HOST_ARCH = arm-linux-androideabi
-  ANDROID_ARCH = arm
-  ANDROID_MODEL = armv7
-  ANDROID_SYSTEM = linux_eabihf
+  TARGET_ARCH = arm
+  TARGET_MODEL = armv7
+  TARGET_SYSTEM = linux_eabihf
 else ifeq ($(ABI),armeabi)
   HOST_ARCH = arm-linux-androideabi
-  ANDROID_ARCH = arm
-  ANDROID_MODEL = armv5te
-  ANDROID_SYSTEM = linux_eabi
+  TARGET_ARCH = arm
+  TARGET_MODEL = armv5te
+  TARGET_SYSTEM = linux_eabi
 else ifeq ($(ABI),x86)
   HOST_ARCH = i686-linux-android
   TOOLCHAIN = x86-4.8
-  ANDROID_ARCH = x86
-  ANDROID_OCAML_ARCH = i386
-  ANDROID_MODEL = default
-  ANDROID_SYSTEM = linux_elf
+  TARGET_ARCH = x86
+  TARGET_OCAML_ARCH = i386
+  TARGET_MODEL = default
+  TARGET_SYSTEM = linux_elf
 else
-  $(error Unknown ABI $(ABI))
+  $(error Unknown ABI: $(ABI))
 endif
 
-ifeq ($(ABI),armeabi-v7a)
-  ANDROID_CFLAGS = -march=armv7-a -mfpu=vfpv3-d16 -mhard-float \
-                   -D_NDK_MATH_NO_SOFTFP=1
-  ANDROID_LDFLAGS = -march=armv7-a -Wl,--fix-cortex-a8 -Wl,--no-warn-mismatch
-  ANDROID_MATHLIB = -lm_hard
+ifeq ($(ABI),gnueabihf)
+  TARGET_CFLAGS = -march=armv7-a -mfpu=vfpv3-d16 -mhard-float -I/usr/arm-linux-gnueabihf/include
+  TARGET_LDFLAGS = -march=armv7-a -Wl,--fix-cortex-a8 -Wl,--no-warn-mismatch
+  TARGET_MATHLIB = -lm
+else ifeq ($(ABI),armeabi-v7a)
+  TARGET_CFLAGS = -march=armv7-a -mfpu=vfpv3-d16 -mhard-float
+  TARGET_LDFLAGS = -march=armv7-a -Wl,--fix-cortex-a8 -Wl,--no-warn-mismatch
+  TARGET_MATHLIB = -lm_hard
 else
-  ANDROID_CFLAGS =
-  ANDROID_LDFLAGS =
-  ANDROID_MATHLIB = -lm
+  TARGET_CFLAGS =
+  TARGET_LDFLAGS =
+  TARGET_MATHLIB = -lm
 endif
 
 SRC = ocaml-src
 
 ARCH=$(shell uname | tr A-Z a-z)
-ANDROID_PATH = $(ANDROID_NDK)/toolchains/$(TOOLCHAIN)/prebuilt/$(ARCH)-x86/bin
 
 CORE_OTHER_LIBS = unix str num dynlink
-STDLIB=$(shell $(ANDROID_BINDIR)/ocamlc -config | \
+STDLIB=$(shell $(TARGET_BINDIR)/ocamlc -config | \
                sed -n 's/standard_library: \(.*\)/\1/p')
 
 all: stamp-install
@@ -49,31 +57,31 @@ all: stamp-install
 stamp-install: stamp-build
 # Install the compiler
 	cd $(SRC) && make install
-# Put links to binaries in $ANDROID_BINDIR
-	rm -f $(ANDROID_BINDIR)/$(HOST_ARCH)/ocamlbuild
-	rm -f $(ANDROID_BINDIR)/$(HOST_ARCH)/ocamlbuild.byte
-	for i in $(ANDROID_BINDIR)/$(HOST_ARCH)/*; do \
-	  ln -sf $$i $(ANDROID_BINDIR)/$(HOST_ARCH)-`basename $$i`; \
+# Put links to binaries in $TARGET_BINDIR
+	rm -f $(TARGET_BINDIR)/$(HOST_ARCH)/ocamlbuild
+	rm -f $(TARGET_BINDIR)/$(HOST_ARCH)/ocamlbuild.byte
+	for i in $(TARGET_BINDIR)/$(HOST_ARCH)/*; do \
+	  ln -sf $$i $(TARGET_BINDIR)/$(HOST_ARCH)-`basename $$i`; \
 	done
-# Install the Android ocamlrun binary
-	mkdir -p $(ANDROID_PREFIX)/bin
+# Install the target ocamlrun binary
+	mkdir -p $(TARGET_PREFIX)/bin
 	cd $(SRC) && \
-	cp byterun/ocamlrun.target $(ANDROID_PREFIX)/bin/ocamlrun
+	cp byterun/ocamlrun.target $(TARGET_PREFIX)/bin/ocamlrun
 # Add a link to camlp4 libraries
-	rm -rf $(ANDROID_PREFIX)/lib/ocaml/camlp4
-	ln -sf $(STDLIB)/camlp4 $(ANDROID_PREFIX)/lib/ocaml/camlp4
+	rm -rf $(TARGET_PREFIX)/lib/ocaml/camlp4
+	ln -sf $(STDLIB)/camlp4 $(TARGET_PREFIX)/lib/ocaml/camlp4
 	touch stamp-install
 
 stamp-build: stamp-runtime
 # Restore the ocamlrun binary for the local machine
 	cd $(SRC) && cp byterun/ocamlrun.local byterun/ocamlrun
-# Compile the libraries for Android
+# Compile the libraries for target
 	cd $(SRC) && make coreall opt-core otherlibraries otherlibrariesopt
 	cd $(SRC) && make ocamltoolsopt
 	touch stamp-build
 
 stamp-runtime: stamp-prepare
-# Recompile the runtime for Android
+# Recompile the runtime for target
 	cd $(SRC) && make -C byterun all
 # Save the ARM ocamlrun binary
 	cd $(SRC) && cp byterun/ocamlrun byterun/ocamlrun.target
@@ -82,20 +90,20 @@ stamp-runtime: stamp-prepare
 stamp-prepare: stamp-core
 # Update configuration files
 	set -e; cd config; for f in *; do \
-	  sed -e 's%ANDROID_NDK%$(ANDROID_NDK)%' \
-	      -e 's%ANDROID_PATH%$(ANDROID_PATH)%g' \
-	      -e 's%ANDROID_PREFIX%$(ANDROID_PREFIX)%g' \
-	      -e 's%ANDROID_BINDIR%$(ANDROID_BINDIR)%g' \
+	  sed -e 's%TARGET_NDK%$(TARGET_NDK)%' \
+	      -e 's%TARGET_PATH%$(TARGET_TOOLCHAIN_PATH)%g' \
+	      -e 's%TARGET_PREFIX%$(TARGET_PREFIX)%g' \
+	      -e 's%TARGET_BINDIR%$(TARGET_BINDIR)%g' \
 	      -e 's%OCAML_SRC%$(OCAML_SRC)%g' \
 	      -e 's%HOST_ARCH%$(HOST_ARCH)%g' \
-	      -e 's%ANDROID_CFLAGS%$(ANDROID_CFLAGS)%g' \
-	      -e 's%ANDROID_LDFLAGS%$(ANDROID_LDFLAGS)%g' \
-	      -e 's%ANDROID_MATHLIB%$(ANDROID_MATHLIB)%g' \
-	      -e 's%ANDROID_ARCH%$(ANDROID_ARCH)%g' \
-	      -e 's%ANDROID_OCAML_ARCH%$(ANDROID_OCAML_ARCH)%g' \
-	      -e 's%ANDROID_MODEL%$(ANDROID_MODEL)%g' \
-	      -e 's%ANDROID_SYSTEM%$(ANDROID_SYSTEM)%g' \
-	      -e 's%ANDROID_PLATFORM%$(ANDROID_PLATFORM)%g' \
+	      -e 's%TARGET_CFLAGS%$(TARGET_CFLAGS)%g' \
+	      -e 's%TARGET_LDFLAGS%$(TARGET_LDFLAGS)%g' \
+	      -e 's%TARGET_MATHLIB%$(TARGET_MATHLIB)%g' \
+	      -e 's%TARGET_ARCH%$(TARGET_ARCH)%g' \
+	      -e 's%TARGET_OCAML_ARCH%$(TARGET_OCAML_ARCH)%g' \
+	      -e 's%TARGET_MODEL%$(TARGET_MODEL)%g' \
+	      -e 's%TARGET_SYSTEM%$(TARGET_SYSTEM)%g' \
+	      -e 's%TARGET_PLATFORM%$(TARGET_PLATFORM)%g' \
 	      $$f > ../$(SRC)/config/$$f; \
 	done
 # Apply patches
@@ -122,8 +130,8 @@ stamp-core: stamp-configure
 stamp-configure: stamp-copy
 # Configuration...
 	cd $(SRC) && \
-	./configure -prefix $(ANDROID_PREFIX) \
-		-bindir $(ANDROID_BINDIR)/$(HOST_ARCH) \
+	./configure -prefix $(TARGET_PREFIX) \
+		-bindir $(TARGET_BINDIR)/$(HOST_ARCH) \
 	        -mandir $(shell pwd)/no-man \
 		-cc "gcc -m32" -as "gcc -m32 -c" -aspp "gcc -m32 -c" \
 		-no-pthread
@@ -136,13 +144,13 @@ stamp-copy:
 	  echo Error: OCaml sources not found. Check OCAML_SRC variable.; \
 	  exit 1; \
 	fi
-	@if ! [ -d $(ANDROID_PATH) ]; then \
-	  echo Error: Android NDK not found. Check ANDROID_NDK variable.; \
+	@if ! [ -d $(TARGET_TOOLCHAIN_PATH) ]; then \
+	  echo Error: Android NDK not found. Check TARGET_NDK variable.; \
 	  exit 1; \
 	fi
-	@if ! [ -f $(ANDROID_BINDIR)/ocamlc ]; then \
-	  echo Error: $(ANDROID_BINDIR)/ocamlc not found. \
-	    Check ANDROID_BINDIR variable.; \
+	@if ! [ -f $(TARGET_BINDIR)/ocamlc ]; then \
+	  echo Error: $(TARGET_BINDIR)/ocamlc not found. \
+	    Check TARGET_BINDIR variable.; \
 	  exit 1; \
 	fi
 	cp -a $(OCAML_SRC) $(SRC)
