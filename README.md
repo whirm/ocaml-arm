@@ -15,7 +15,8 @@ sudo dpkg --add-architecture i386 # Only if on amd64.
 sudo apt-get update
 sudo apt-get install gcc-4.9-arm-linux-gnueabihf gcc-arm-linux-gnueabihf libc6-dev:armhf libgcc-4.9-dev:armhf linux-libc-dev:i386 opam
 opam init # And follow the instructions printed.
-opam switch 4.02.0
+opam switch 4.02.1 # It also works with 4.02.0, but I still have to redo the patches for 4.02.2.
+eval `opam config env`
 opam install ocaml-src
 ```
 
